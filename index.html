@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8" />
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+/>
+
+<title>HANC // NEON VOID</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  touch-action:none;
+}
+
+html,
+body{
+
+  width:100%;
+  height:100%;
+  overflow:hidden;
+
+  background:#000;
+
+  font-family:
+    Inter,
+    Arial,
+    sans-serif;
+}
+
+canvas{
+
+  display:block;
+
+  width:100vw;
+  height:100vh;
+}
+
+/* HUD */
+
+#hud{
+
+  position:fixed;
+
+  top:20px;
+  left:20px;
+  right:20px;
+
+  display:flex;
+  justify-content:space-between;
+
+  z-index:50;
+
+  color:white;
+
+  font-size:12px;
+
+  letter-spacing:3px;
+
+  pointer-events:none;
+
+  text-shadow:
+    0 0 12px rgba(255,255,255,0.25);
+}
+
+#combo{
+
+  position:fixed;
+
+  top:56px;
+  left:50%;
+
+  transform:translateX(-50%);
+
+  color:white;
+
+  z-index:50;
+
+  font-size:26px;
+
+  font-weight:700;
+
+  letter-spacing:6px;
+
+  text-shadow:
+    0 0 20px rgba(255,255,255,0.45);
+
+  pointer-events:none;
+}
+
+/* MENUS */
+
+#menu,
+#gameover{
+
+  position:fixed;
+  inset:0;
+
+  display:flex;
+  flex-direction:column;
+
+  align-items:center;
+  justify-content:center;
+
+  text-align:center;
+
+  z-index:100;
+
+  background:
+    radial-gradient(
+      circle at top,
+      rgba(18,25,45,0.55),
+      rgba(0,0,0,0.94)
+    );
+
+  backdrop-filter:blur(10px);
+}
+
+#gameover{
+  display:none;
+}
+
+h1,
+h2{
+
+  color:white;
+
+  font-size:34px;
+
+  letter-spacing:12px;
+
+  margin-bottom:24px;
+
+  text-shadow:
+    0 0 25px rgba(255,255,255,0.3);
+}
+
+p{
+
+  width:85%;
+  max-width:360px;
+
+  color:rgba(255,255,255,0.7);
+
+  line-height:1.8;
+
+  letter-spacing:2px;
+
+  margin-bottom:42px;
+
+  font-size:13px;
+}
+
+button{
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255,255,255,0.14),
+      rgba(255,255,255,0.03)
+    );
+
+  border:
+    1px solid rgba(255,255,255,0.15);
+
+  color:white;
+
+  padding:18px 38px;
+
+  border-radius:18px;
+
+  font-size:11px;
+
+  letter-spacing:4px;
+
+  cursor:pointer;
+
+  transition:0.2s;
+
+  box-shadow:
+    0 0 20px rgba(255,255,255,0.08);
+}
+
+button:hover{
+
+  transform:scale(1.05);
+
+  border-color:
+    rgba(255,255,255,0.45);
+}
+
+button:active{
+  transform:scale(0.96);
+}
+
+/* FX */
+
+.noise{
+
+  position:fixed;
+  inset:0;
+
+  pointer-events:none;
+
+  opacity:0.025;
+
+  z-index:200;
+
+  background-image:
+    repeating-radial-gradient(
+      circle at 0 0,
+      transparent 0,
+      #fff 1px,
+      transparent 2px
+    );
+}
+
+.scanlines{
+
+  position:fixed;
+  inset:0;
+
+  pointer-events:none;
+
+  opacity:0.05;
+
+  z-index:201;
+
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.03),
+      rgba(255,255,255,0.03) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+}
+
+.flash{
+  animation:flash 0.16s;
+}
+
+@keyframes flash{
+
+  0%{
+    opacity:1;
+  }
+
+  50%{
+    opacity:0.5;
+  }
+
+  100%{
+    opacity:1;
+  }
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="noise"></div>
+<div class="scanlines"></div>
+
+<div id="hud">
+
+  <div>
+    SCORE:
+    <span id="score">0</span>
+  </div>
+
+  <div>
+    BEST:
+    <span id="best">0</span>
+  </div>
+
+</div>
+
+<div id="combo">
+  X1
+</div>
+
+<div id="menu">
+
+  <h1>HANC</h1>
+
+  <p>
+    COLLECT SIGNALS • AVOID CORRUPTION •
+    SURVIVE THE NEON VOID
+  </p>
+
+  <button id="startBtn">
+    START RUN
+  </button>
+
+</div>
+
+<div id="gameover">
+
+  <h2>SIGNAL LOST</h2>
+
+  <p>
+    FINAL SCORE:
+    <span id="finalScore">0</span>
+  </p>
+
+  <button id="restartBtn">
+    RETRY
+  </button>
+
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const tg = window.Telegram.WebApp;
+
+if(tg){
+
+  tg.expand();
+
+  tg.ready();
+
+}
+
+const canvas =
+  document.getElementById("game");
+
+const ctx =
+  canvas.getContext("2d");
+
+let w =
+  canvas.width = window.innerWidth;
+
+let h =
+  canvas.height = window.innerHeight;
+
+/* HUD */
+
+const scoreEl =
+  document.getElementById("score");
+
+const bestEl =
+  document.getElementById("best");
+
+const comboEl =
+  document.getElementById("combo");
+
+const finalScoreEl =
+  document.getElementById("finalScore");
+
+/* STORAGE */
+
+let best =
+  localStorage.getItem("hanc_best") || 0;
+
+bestEl.innerText = best;
+
+/* IMAGE */
+
+const hanc = new Image();
+
+/* IMPORTANT:
+PUT YOUR IMAGE FILE
+IN SAME FOLDER
+
+NAME:
+hanc.png
+*/
+
+hanc.src = "hanc.png";
+
+/* GAME */
+
+let running = false;
+
+let score = 0;
+
+let combo = 1;
+
+let speed = 7;
+
+let stars = [];
+
+let obstacles = [];
+
+let signals = [];
+
+let particles = [];
+
+let glowPulse = 0;
+
+/* STARS */
+
+for(let i=0;i<140;i++){
+
+  stars.push({
+
+    x:Math.random()*w,
+    y:Math.random()*h,
+    size:Math.random()*2.2,
+    speed:Math.random()*1.5
+
+  });
+
+}
+
+/* PLAYER */
+
+const player = {
+
+  x:w/2,
+
+  /* LOWER */
+  y:h-55,
+
+  /* SMALLER */
+  size:78
+
+};
+
+/* RESET */
+
+function resetGame(){
+
+  score = 0;
+
+  combo = 1;
+
+  speed = 7;
+
+  obstacles = [];
+
+  signals = [];
+
+  particles = [];
+
+  running = true;
+
+  document.getElementById(
+    "menu"
+  ).style.display = "none";
+
+  document.getElementById(
+    "gameover"
+  ).style.display = "none";
+
+  spawnObstacle();
+
+  spawnSignal();
+
+  loop();
+
+}
+
+/* SPAWN */
+
+function spawnObstacle(){
+
+  if(!running) return;
+
+  const lane =
+    Math.floor(Math.random()*3);
+
+  const laneWidth =
+    w/3;
+
+  obstacles.push({
+
+    x:
+      lane*laneWidth+
+      laneWidth/2-48,
+
+    y:-220,
+
+    width:96,
+
+    height:
+      120+Math.random()*140
+
+  });
+
+  setTimeout(
+
+    spawnObstacle,
+
+    700-Math.min(speed*24,480)
+
+  );
+
+}
+
+function spawnSignal(){
+
+  if(!running) return;
+
+  const lane =
+    Math.floor(Math.random()*3);
+
+  const laneWidth =
+    w/3;
+
+  signals.push({
+
+    x:
+      lane*laneWidth+
+      laneWidth/2,
+
+    y:-100,
+
+    size:16
+
+  });
+
+  setTimeout(
+    spawnSignal,
+    820
+  );
+
+}
+
+/* UPDATE */
+
+function update(){
+
+  glowPulse += 0.04;
+
+  score += 0.12*combo;
+
+  speed += 0.0012;
+
+  scoreEl.innerText =
+    Math.floor(score);
+
+  stars.forEach(s=>{
+
+    s.y += s.speed+speed*0.15;
+
+    if(s.y>h){
+
+      s.y = -10;
+
+      s.x = Math.random()*w;
+
+    }
+
+  });
+
+  obstacles.forEach(o=>{
+
+    o.y += speed;
+
+    if(
+
+      player.x-player.size/2 < o.x+o.width &&
+      player.x+player.size/2 > o.x &&
+      player.y-player.size/2 < o.y+o.height &&
+      player.y+player.size/2 > o.y
+
+    ){
+
+      endGame();
+
+    }
+
+  });
+
+  signals.forEach(s=>{
+
+    s.y += speed;
+
+    const dx =
+      player.x-s.x;
+
+    const dy =
+      player.y-s.y;
+
+    const dist =
+      Math.sqrt(dx*dx+dy*dy);
+
+    if(dist<52){
+
+      s.dead = true;
+
+      combo++;
+
+      score += 25*combo;
+
+      comboEl.innerText =
+        "X"+combo;
+
+      burst(s.x,s.y);
+
+      if(combo%5===0){
+
+        glitch();
+
+      }
+
+    }
+
+  });
+
+  obstacles =
+    obstacles.filter(
+      o=>o.y<h+300
+    );
+
+  signals =
+    signals.filter(
+      s=>s.y<h+100&&!s.dead
+    );
+
+  particles.forEach(p=>{
+
+    p.x += p.vx;
+
+    p.y += p.vy;
+
+    p.life--;
+
+  });
+
+  particles =
+    particles.filter(
+      p=>p.life>0
+    );
+
+}
+
+/* DRAW */
+
+function drawBackground(){
+
+  const gradient =
+    ctx.createLinearGradient(
+      0,0,0,h
+    );
+
+  gradient.addColorStop(
+    0,
+    "#11172d"
+  );
+
+  gradient.addColorStop(
+    0.5,
+    "#050505"
+  );
+
+  gradient.addColorStop(
+    1,
+    "#000"
+  );
+
+  ctx.fillStyle = gradient;
+
+  ctx.fillRect(0,0,w,h);
+
+}
+
+function drawStars(){
+
+  stars.forEach(s=>{
+
+    ctx.beginPath();
+
+    ctx.arc(
+      s.x,
+      s.y,
+      s.size,
+      0,
+      Math.PI*2
+    );
+
+    ctx.fillStyle =
+      "rgba(255,255,255,0.8)";
+
+    ctx.fill();
+
+  });
+
+}
+
+function drawLanes(){
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.05)";
+
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+
+  ctx.moveTo(w/3,0);
+
+  ctx.lineTo(w/3,h);
+
+  ctx.stroke();
+
+  ctx.beginPath();
+
+  ctx.moveTo((w/3)*2,0);
+
+  ctx.lineTo((w/3)*2,h);
+
+  ctx.stroke();
+
+}
+
+function drawSignals(){
+
+  signals.forEach(s=>{
+
+    ctx.beginPath();
+
+    ctx.arc(
+      s.x,
+      s.y,
+      s.size,
+      0,
+      Math.PI*2
+    );
+
+    ctx.fillStyle =
+      "white";
+
+    ctx.shadowBlur =
+      28+
+      Math.sin(glowPulse)*8;
+
+    ctx.shadowColor =
+      "white";
+
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+  });
+
+}
+
+function drawObstacles(){
+
+  obstacles.forEach(o=>{
+
+    const g =
+      ctx.createLinearGradient(
+        o.x,
+        o.y,
+        o.x+o.width,
+        o.y+o.height
+      );
+
+    g.addColorStop(
+      0,
+      "rgba(255,0,90,0.14)"
+    );
+
+    g.addColorStop(
+      1,
+      "rgba(255,60,60,0.05)"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+      o.x,
+      o.y,
+      o.width,
+      o.height
+    );
+
+    ctx.strokeStyle =
+      "rgba(255,120,120,0.45)";
+
+    ctx.lineWidth = 2;
+
+    ctx.strokeRect(
+      o.x,
+      o.y,
+      o.width,
+      o.height
+    );
+
+  });
+
+}
+
+function drawParticles(){
+
+  particles.forEach(p=>{
+
+    ctx.fillStyle =
+      `rgba(255,255,255,${
+        p.life/30
+      })`;
+
+    ctx.fillRect(
+      p.x,
+      p.y,
+      3,
+      3
+    );
+
+  });
+
+}
+
+function drawPlayer(){
+
+  const float =
+    Math.sin(Date.now()*0.006)*2;
+
+  ctx.save();
+
+  ctx.translate(
+    player.x,
+    player.y+float
+  );
+
+  /* OUTER GLOW */
+
+  ctx.beginPath();
+
+  ctx.arc(
+    0,
+    0,
+    player.size/2+8,
+    0,
+    Math.PI*2
+  );
+
+  const glow =
+    ctx.createRadialGradient(
+      0,0,8,
+      0,0,player.size
+    );
+
+  glow.addColorStop(
+    0,
+    "rgba(255,255,255,0.22)"
+  );
+
+  glow.addColorStop(
+    1,
+    "rgba(255,255,255,0)"
+  );
+
+  ctx.fillStyle = glow;
+
+  ctx.fill();
+
+  /* PERFECT CIRCLE */
+
+  ctx.beginPath();
+
+  ctx.arc(
+    0,
+    0,
+    player.size/2,
+    0,
+    Math.PI*2
+  );
+
+  ctx.closePath();
+
+  ctx.clip();
+
+  ctx.drawImage(
+
+    hanc,
+
+    -player.size/2,
+    -player.size/2,
+
+    player.size,
+    player.size
+
+  );
+
+  ctx.restore();
+
+  /* OUTLINE */
+
+  ctx.beginPath();
+
+  ctx.arc(
+    player.x,
+    player.y+float,
+    player.size/2,
+    0,
+    Math.PI*2
+  );
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.32)";
+
+  ctx.lineWidth = 2;
+
+  ctx.shadowBlur = 25;
+
+  ctx.shadowColor =
+    "rgba(255,255,255,0.45)";
+
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+
+}
+
+function draw(){
+
+  drawBackground();
+
+  drawStars();
+
+  drawLanes();
+
+  drawSignals();
+
+  drawObstacles();
+
+  drawParticles();
+
+  drawPlayer();
+
+}
+
+/* FX */
+
+function burst(x,y){
+
+  for(let i=0;i<18;i++){
+
+    particles.push({
+
+      x,
+      y,
+
+      vx:
+        (Math.random()-0.5)*8,
+
+      vy:
+        (Math.random()-0.5)*8,
+
+      life:30
+
+    });
+
+  }
+
+}
+
+function glitch(){
+
+  document.body.style.transform =
+    `translateX(${
+      Math.random()*12-6
+    }px)`;
+
+  setTimeout(()=>{
+
+    document.body.style.transform =
+      "translateX(0px)";
+
+  },90);
+
+}
+
+/* END */
+
+function endGame(){
+
+  running = false;
+
+  document.body.classList.add(
+    "flash"
+  );
+
+  finalScoreEl.innerText =
+    Math.floor(score);
+
+  if(score>best){
+
+    best =
+      Math.floor(score);
+
+    localStorage.setItem(
+      "hanc_best",
+      best
+    );
+
+    bestEl.innerText = best;
+
+  }
+
+  setTimeout(()=>{
+
+    document.getElementById(
+      "gameover"
+    ).style.display = "flex";
+
+  },250);
+
+}
+
+/* LOOP */
+
+function loop(){
+
+  if(!running) return;
+
+  update();
+
+  draw();
+
+  requestAnimationFrame(loop);
+
+}
+
+/* CONTROLS */
+
+canvas.addEventListener(
+  "touchmove",
+  e=>{
+
+    const touch =
+      e.touches[0];
+
+    player.x =
+      touch.clientX;
+
+  }
+);
+
+canvas.addEventListener(
+  "mousemove",
+  e=>{
+
+    player.x =
+      e.clientX;
+
+  }
+);
+
+/* BUTTONS */
+
+document
+.getElementById("startBtn")
+.addEventListener(
+  "click",
+  resetGame
+);
+
+document
+.getElementById("restartBtn")
+.addEventListener(
+  "click",
+  resetGame
+);
+
+/* RESIZE */
+
+window.addEventListener(
+  "resize",
+  ()=>{
+
+    w =
+      canvas.width =
+      window.innerWidth;
+
+    h =
+      canvas.height =
+      window.innerHeight;
+
+    player.y = h-55;
+
+  }
+);
+
+</script>
+
+</body>
+</html>
