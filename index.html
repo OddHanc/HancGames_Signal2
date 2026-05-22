@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>HANC // NEON VOID</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  touch-action:none;
+}
+
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#000;
+  font-family:Inter,Arial,sans-serif;
+}
+
+canvas{
+  display:block;
+  width:100vw;
+  height:100vh;
+}
+
+/* HUD */
+#hud{
+  position:fixed;
+  top:20px;
+  left:20px;
+  right:20px;
+  display:flex;
+  justify-content:space-between;
+  color:white;
+  font-size:12px;
+  z-index:50;
+}
+
+#combo{
+  position:fixed;
+  top:56px;
+  left:50%;
+  transform:translateX(-50%);
+  color:white;
+  font-size:26px;
+  z-index:50;
+}
+
+/* MENUS */
+#menu,#gameover{
+  position:fixed;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  z-index:100;
+  background:radial-gradient(circle at top,rgba(20,25,45,0.65),black);
+  color:white;
+}
+
+/* welcome image (ONLY ADDITION) */
+#menu img{
+  width:90px;
+  height:90px;
+  object-fit:contain;
+  margin-bottom:18px;
+  opacity:0.9;
+}
+
+#menu h1{
+  font-size:42px;
+  letter-spacing:6px;
+  font-weight:300;
+  margin-bottom:10px;
+  opacity:0.95;
+}
+
+#menu p{
+  font-size:11px;
+  letter-spacing:2px;
+  opacity:0.6;
+  max-width:260px;
+  line-height:1.4;
+}
+
+#gameover{display:none;}
+
+/* BUTTONS */
+button{
+  margin-top:14px;
+  padding:16px 28px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.2);
+  background:rgba(255,255,255,0.08);
+  color:white;
+  letter-spacing:2px;
+  cursor:pointer;
+}
+
+/* flash */
+.flash{animation:flash .15s;}
+
+@keyframes flash{
+  0%{opacity:1}
+  50%{opacity:.4}
+  100%{opacity:1}
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="hud">
+  <div>SCORE: <span id="score">0</span></div>
+  <div>BEST: <span id="best">0</span></div>
+</div>
+
+<div id="combo"></div>
+
+<div id="menu">
+
+  <!-- ONLY NEW LINE -->
+  <img src="hanc.png" alt="HANC"/>
+
+  <h1>HANC</h1>
+  <p>COLLECT SIGNALS • AVOID CORRUPTION • SURVIVE THE VOID</p>
+
+  <button id="startBtn">START RUN</button>
+  <button id="copyLinkBtn">COPY LINK</button>
+  <button id="shareBtn">SHARE SIGNAL</button>
+</div>
+
+<div id="gameover">
+  <h2>SIGNAL LOST</h2>
+  <p>FINAL SCORE: <span id="finalScore">0</span></p>
+
+  <button id="shareGameOverBtn">SHARE & CHALLENGE</button>
+  <button id="restartBtn">RETRY</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const tg = window.Telegram?.WebApp;
+if(tg){ tg.expand(); tg.ready(); }
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let w=canvas.width=innerWidth;
+let h=canvas.height=innerHeight;
+
+/* UI */
+const scoreEl=document.getElementById("score");
+const bestEl=document.getElementById("best");
+const comboEl=document.getElementById("combo");
+const finalScoreEl=document.getElementById("finalScore");
+
+let best=localStorage.getItem("hanc_best")||0;
+bestEl.innerText=best;
+
+const hanc = new Image();
+hanc.src = "./hanc.png";
+
+hanc.onerror = () => {
+  console.error("hanc.png not found — check file location");
+};
+
+hanc.onload = () => {
+  console.log("hanc.png loaded successfully");
+};
+
+let running=false;
+let score=0;
+let combo=1;
+let speed=6;
+
+const player={x:w/2,y:h-75,size:70};
+let targetX=player.x;
+
+let stars=[],obstacles=[],signals=[];
+
+/* stars */
+for(let i=0;i<120;i++){
+  stars.push({
+    x:Math.random()*w,
+    y:Math.random()*h,
+    s:Math.random()*2
+  });
+}
+
+function reset(){
+  running=true;
+  score=0;
+  combo=1;
+  speed=6;
+
+  obstacles=[];
+  signals=[];
+
+  player.x=w/2;
+  targetX=w/2;
+
+  comboEl.innerText="X1";
+
+  menu.style.display="none";
+  gameover.style.display="none";
+
+  spawnObs();
+  spawnSig();
+  loop();
+}
+
+function spawnObs(){
+  if(!running) return;
+
+  const laneW=w/3;
+  const safe=Math.floor(Math.random()*3);
+
+  for(let i=0;i<3;i++){
+    if(i!==safe && Math.random()>0.5){
+      obstacles.push({
+        x:i*laneW+laneW/2-40,
+        y:-200,
+        w:80,
+        h:120
+      });
+    }
+  }
+
+  setTimeout(spawnObs,850);
+}
+
+function spawnSig(){
+  if(!running) return;
+
+  const lane=Math.floor(Math.random()*3);
+  const laneW=w/3;
+
+  signals.push({
+    x:lane*laneW+laneW/2,
+    y:-100,
+    r:14
+  });
+
+  setTimeout(spawnSig,800);
+}
+
+function update(){
+
+  score+=0.1*combo;
+  speed+=0.002;
+
+  player.x+=(targetX-player.x)*0.25;
+
+  scoreEl.innerText=Math.floor(score);
+
+  stars.forEach(s=>{
+    s.y+=speed;
+    if(s.y>h){s.y=0;s.x=Math.random()*w;}
+  });
+
+  obstacles.forEach(o=>{
+    o.y+=speed;
+
+    if(
+      player.x>o.x && player.x<o.x+o.w &&
+      player.y>o.y && player.y<o.y+o.h
+    ){
+      end();
+    }
+  });
+
+  signals.forEach(s=>{
+    s.y+=speed;
+
+    let dx=player.x-s.x;
+    let dy=player.y-s.y;
+
+    if(Math.sqrt(dx*dx+dy*dy)<45){
+      s.dead=true;
+      combo++;
+      score+=20*combo;
+
+      comboEl.innerText="X"+combo;
+
+      if(navigator.vibrate){
+        navigator.vibrate(25);
+      }
+    }
+  });
+
+  signals=signals.filter(s=>!s.dead && s.y<h+100);
+}
+
+function draw(){
+
+  let g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,"#0b1020");
+  g.addColorStop(1,"#000");
+
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,w,h);
+
+  ctx.fillStyle="white";
+  stars.forEach(s=>{
+    ctx.globalAlpha=0.7;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.s,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+
+  ctx.strokeStyle="rgba(255,255,255,0.05)";
+  ctx.lineWidth=2;
+
+  ctx.beginPath();
+  ctx.moveTo(w/3,0);
+  ctx.lineTo(w/3,h);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo((w/3)*2,0);
+  ctx.lineTo((w/3)*2,h);
+  ctx.stroke();
+
+  obstacles.forEach(o=>{
+    ctx.fillStyle="rgba(255,0,80,0.15)";
+    ctx.fillRect(o.x,o.y,o.w,o.h);
+  });
+
+  signals.forEach(s=>{
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle="white";
+    ctx.fill();
+  });
+
+  ctx.drawImage(
+    hanc,
+    player.x-player.size/2,
+    player.y-player.size/2,
+    player.size,
+    player.size
+  );
+}
+
+function loop(){
+  if(!running) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function end(){
+  running=false;
+
+  finalScoreEl.innerText=Math.floor(score);
+  gameover.style.display="flex";
+
+  if(score>best){
+    best=Math.floor(score);
+    localStorage.setItem("hanc_best",best);
+    bestEl.innerText=best;
+  }
+
+  if(window.Telegram?.WebApp){
+    Telegram.WebApp.sendData(JSON.stringify({
+      type:"score",
+      score:Math.floor(score),
+      best:best
+    }));
+  }
+}
+
+canvas.onmousemove=e=>targetX=e.clientX;
+canvas.ontouchmove=e=>targetX=e.touches[0].clientX;
+
+startBtn.onclick=reset;
+restartBtn.onclick=reset;
+
+shareBtn.onclick=()=>{
+  window.open("https://t.me/share/url?url=https://t.me/OddHancGamesBot/HancSignal2");
+};
+
+shareGameOverBtn.onclick=()=>{
+  window.open("https://t.me/share/url?url=https://t.me/OddHancGamesBot/HancSignal2&text=I scored "+Math.floor(score));
+};
+
+copyLinkBtn.onclick=()=>{
+  navigator.clipboard.writeText("https://t.me/OddHancGamesBot/HancSignal2");
+  alert("COPIED");
+};
+
+window.onresize=()=>{
+  w=canvas.width=innerWidth;
+  h=canvas.height=innerHeight;
+  player.y=h-75;
+};
+
+</script>
+
+</body>
+</html>
